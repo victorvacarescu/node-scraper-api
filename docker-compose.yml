@@ -1,0 +1,55 @@
+services:
+  mysqldb:
+    image: mysql:8.0
+    container_name: mysqlcontainer
+    command: --default-authentication-plugin=mysql_native_password
+    restart: unless-stopped
+    volumes:
+      - ./dbinit/init.sql:/docker-entrypoint-initdb.d/0_init.sql
+      - $HOME/database:/var/lib/mysql
+    ports:
+      - 3306:3306
+    expose:
+      - 3306
+    environment:
+      MYSQL_DATABASE: scraperdb
+      MYSQL_USER: admin
+      MYSQL_PASSWORD: test
+      MYSQL_ROOT_PASSWORD: test
+      SERVICE_TAGS: dev
+      SERVICE_NAME: mysql
+    networks:
+      - internalnet
+
+  scraper:
+    container_name: scrapercontainer
+    build: .
+    image: scraperimage:003
+    environment:
+      DB_HOST: mysqldb
+      DB_USER: 'root'
+      DB_PASSWORD: 'test'
+      DB_NAME: scraperdb
+      DB_PORT: 3306
+      DB_CONNECTION_LIMIT: 10
+      SERVER_PORT: 3000
+    ports:
+      - 3000:3000
+    expose:
+      - 3000
+    depends_on:
+      - mysqldb
+    networks:
+      - internalnet
+      
+  cronjob:
+    image: alpine:latest
+    container_name: croncontainer
+    command: /bin/sh -c "echo '*/10 * * * * /usr/local/bin/ts-node /app/scraper.controller.ts' | crontab - && cron -f"
+    depends_on:
+      - scraper
+    networks:
+      - internalnet
+networks:
+  internalnet:
+    driver: bridge
